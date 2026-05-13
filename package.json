@@ -1,0 +1,29 @@
+{
+  "name": "@noelclaw/research",
+  "version": "1.0.0",
+  "description": "Noelclaw MCP server — crypto research, live market data, and AI agent chat",
+  "main": "dist/index.js",
+  "bin": {
+    "noelclaw-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "crypto", "ai", "defi", "noelclaw"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
