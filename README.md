@@ -16,7 +16,41 @@ Noelclaw as an MCP skill. Install in Claude Desktop, Claude Code, Cursor, Hermes
 
 ---
 
-## Step 1 — Set Convex Environment Variables
+## Quick Install (Recommended)
+
+### Hermes Agent
+
+```
+hermes mcp add noelclaw --command npx --args @noelclaw/research --env NOELCLAW_CONVEX_URL=https://your-convex-url.convex.site
+```
+
+### Claude Code
+
+```bash
+claude mcp add noelclaw -- npx @noelclaw/research
+```
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "noelclaw": {
+      "command": "npx",
+      "args": ["@noelclaw/research"],
+      "env": {
+        "NOELCLAW_CONVEX_URL": "https://your-convex-url.convex.site"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Self-Hosted Install (build from source)
+
+### Step 1 — Set Convex Environment Variables
 
 Run these in the `app/` folder (where `convex/` lives):
 
@@ -30,9 +64,7 @@ Or set them manually in the **Convex Dashboard → your deployment → Settings 
 
 > `BANKR_API_KEY` and `COINGECKO_API_KEY` should already be set.
 
----
-
-## Step 2 — Build
+### Step 2 — Build
 
 ```bash
 cd mcp-server
@@ -43,7 +75,7 @@ npm run build
 
 ---
 
-## Installation by Client
+## Installation by Client (self-hosted)
 
 ### Claude Desktop
 
@@ -56,9 +88,9 @@ Edit the config file:
   "mcpServers": {
     "noelclaw": {
       "command": "node",
-      "args": ["C:/Users/sagir/Downloads/noelapp/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/dist/index.js"],
       "env": {
-        "NOELCLAW_CONVEX_URL": "https://befitting-porcupine-276.convex.site"
+        "NOELCLAW_CONVEX_URL": "https://your-convex-url.convex.site"
       }
     }
   }
@@ -72,7 +104,7 @@ Restart Claude Desktop. Tools appear automatically in the tools panel.
 ### Claude Code CLI
 
 ```bash
-claude mcp add noelclaw -- node /absolute/path/to/mcp-server/dist/index.js
+claude mcp add noelclaw -- node /absolute/path/to/dist/index.js
 ```
 
 Or edit `~/.claude/settings.json`:
@@ -82,9 +114,9 @@ Or edit `~/.claude/settings.json`:
   "mcpServers": {
     "noelclaw": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/dist/index.js"],
       "env": {
-        "NOELCLAW_CONVEX_URL": "https://befitting-porcupine-276.convex.site"
+        "NOELCLAW_CONVEX_URL": "https://your-convex-url.convex.site"
       }
     }
   }
@@ -102,9 +134,9 @@ Open **Settings → MCP** or edit `~/.cursor/mcp.json`:
   "mcpServers": {
     "noelclaw": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/dist/index.js"],
       "env": {
-        "NOELCLAW_CONVEX_URL": "https://befitting-porcupine-276.convex.site"
+        "NOELCLAW_CONVEX_URL": "https://your-convex-url.convex.site"
       }
     }
   }
@@ -123,9 +155,9 @@ Hermes uses stdio MCP transport. Add to your Hermes config file (usually `hermes
   "mcp_servers": {
     "noelclaw": {
       "command": "node",
-      "args": ["/path/to/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/dist/index.js"],
       "env": {
-        "NOELCLAW_CONVEX_URL": "https://befitting-porcupine-276.convex.site"
+        "NOELCLAW_CONVEX_URL": "https://your-convex-url.convex.site"
       }
     }
   }
@@ -138,9 +170,9 @@ mcp_servers:
   noelclaw:
     command: node
     args:
-      - /path/to/mcp-server/dist/index.js
+      - /absolute/path/to/dist/index.js
     env:
-      NOELCLAW_CONVEX_URL: https://befitting-porcupine-276.convex.site
+      NOELCLAW_CONVEX_URL: https://your-convex-url.convex.site
 ```
 
 **On a VPS**, copy the `mcp-server/` folder to the server then:
@@ -160,7 +192,7 @@ Point Hermes to the absolute path of `dist/index.js`.
 The server uses standard MCP stdio transport:
 
 ```bash
-NOELCLAW_CONVEX_URL="https://befitting-porcupine-276.convex.site" node dist/index.js
+NOELCLAW_CONVEX_URL="https://your-convex-url.convex.site" node dist/index.js
 ```
 
 Any client that supports `command` + `args` + `env` MCP config will work.
