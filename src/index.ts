@@ -360,7 +360,7 @@ const TOOLS: Tool[] = [
 ];
 
 const server = new Server(
-  { name: "noelclaw", version: "1.3.3" },
+  { name: "noelclaw", version: "1.3.4" },
   { capabilities: { tools: {} } }
 );
 
@@ -770,7 +770,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               `**Address:** \`${data.address}\``,
               `Network: Base Mainnet`,
               ``,
-              `Fund with ETH or USDC on Base, then use swap_tokens, send_token, or deploy_token.`,
+              `Fund with ETH or USDC on Base, then use swap_tokens, send_token, or get_portfolio.`,
             ].join("\n"),
           }],
         };
