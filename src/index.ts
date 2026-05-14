@@ -21,21 +21,44 @@ async function callConvex(path: string, method: string, body?: unknown): Promise
   return res.json() as Promise<any>;
 }
 
+async function notifyTelegram(userId: string, message: string): Promise<{ sent: boolean; reason?: string }> {
+  try {
+    return await callConvex("/user/telegram/notify", "POST", { userId, message });
+  } catch {
+    return { sent: false, reason: "error" };
+  }
+}
+
+const TELEGRAM_SETUP_HINT =
+  "\n\n⚙️ No Telegram configured. To receive results directly in Telegram:\n" +
+  "1. Create a bot via @BotFather on Telegram → get a bot token\n" +
+  "2. Get your chat ID from @userinfobot\n" +
+  "3. Run the `set_telegram` tool with your userId, bot token, and chat ID";
+
 const TOOLS: Tool[] = [
   {
     name: "get_market_data",
     description:
-      "Get live crypto market data: top 20 coins by market cap, trending coins, and key prices for BTC/ETH/SOL. Data sourced from CoinGecko.",
+      "Get live crypto market data: top 20 coins by market cap, trending coins, and key prices for BTC/ETH/SOL. Results are also sent to your Telegram if configured. First-time: run set_telegram to configure your bot.",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {
+        userId: {
+          type: "string",
+          description: "Your user ID — results will be sent to your Telegram bot if configured",
+        },
+        token: {
+          type: "string",
+          description: "Optional: specific token to focus on, e.g. 'BTC', 'ETH'",
+        },
+      },
       required: [],
     },
   },
   {
     name: "ask_noel",
     description:
-      "Ask Noel, a crypto AI agent with DeFi trading intelligence and live market context. Best for analysis, trade ideas, and DeFi questions.",
+      "Ask Noel, a crypto AI agent with DeFi trading intelligence and live market context. Best for analysis, trade ideas, and DeFi questions. Results are sent to your Telegram if configured.",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,6 +78,10 @@ const TOOLS: Tool[] = [
             required: ["role", "content"],
           },
         },
+        userId: {
+          type: "string",
+          description: "Your user ID — the answer will be sent to your Telegram bot if configured",
+        },
       },
       required: ["question"],
     },
@@ -62,7 +89,7 @@ const TOOLS: Tool[] = [
   {
     name: "get_token_data",
     description:
-      "Get market data for specific tokens using CoinGecko agent. Returns price, 24h change, market cap, and volume in a clean list.",
+      "Get market data for specific tokens. Returns price, 24h change, market cap, and volume in a clean list. Results are sent to your Telegram if configured.",
     inputSchema: {
       type: "object",
       properties: {
@@ -70,6 +97,10 @@ const TOOLS: Tool[] = [
           type: "string",
           description:
             "Describe which tokens to look up, e.g. 'show me data for ETH, SOL, and ARB'",
+        },
+        userId: {
+          type: "string",
+          description: "Your user ID — results will be sent to your Telegram bot if configured",
         },
       },
       required: ["question"],
@@ -272,7 +303,7 @@ const TOOLS: Tool[] = [
 ];
 
 const server = new Server(
-  { name: "noelclaw", version: "1.0.0" },
+  { name: "noelclaw", version: "1.2.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -284,7 +315,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "get_market_data": {
-        const data = await callConvex("/mcp/market", "GET");
+        const a = (args ?? {}) as { userId?: string; token?: string };
+        const tokenQ = a.token ? `?token=${encodeURIComponent(a.token)}` : "";
+        const data = await callConvex(`/mcp/market${tokenQ}`, "GET");
         const lines: string[] = [`**Market Data** — ${data.fetchedAt ?? new Date().toISOString()}`, ""];
 
         if (data.keyPrices) {
@@ -320,27 +353,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] };
+        let text = lines.join("\n");
+        if (a.userId) {
+          const tgMsg = `📊 Market Data — ${data.fetchedAt ?? new Date().toISOString()}\n\n` +
+            lines.filter((l) => !l.startsWith("|") && !l.startsWith("**Top")).join("\n").slice(0, 3800) +
+            "\n\n— via Noelclaw";
+          const notif = await notifyTelegram(a.userId, tgMsg);
+          if (!notif.sent && notif.reason === "no_config") text += TELEGRAM_SETUP_HINT;
+          else if (notif.sent) text += "\n\n✅ _Sent to your Telegram._";
+        }
+        return { content: [{ type: "text", text }] };
       }
 
       case "ask_noel": {
-        const a = args as { question: string; messages?: unknown[] };
+        const a = args as { question: string; messages?: unknown[]; userId?: string };
         const data = await callConvex("/mcp/chat", "POST", {
           question: a.question,
           agentId: "noel-default",
           messages: a.messages ?? [],
         });
-        return { content: [{ type: "text", text: data.answer ?? JSON.stringify(data) }] };
+        let answer = data.answer ?? JSON.stringify(data);
+        if (a.userId) {
+          const tgMsg = `🤖 Noel:\n\n${answer}`.slice(0, 4000) + "\n\n— via Noelclaw";
+          const notif = await notifyTelegram(a.userId, tgMsg);
+          if (!notif.sent && notif.reason === "no_config") answer += TELEGRAM_SETUP_HINT;
+          else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
+        }
+        return { content: [{ type: "text", text: answer }] };
       }
 
       case "get_token_data": {
-        const a = args as { question: string };
+        const a = args as { question: string; userId?: string };
         const data = await callConvex("/mcp/chat", "POST", {
           question: a.question,
           agentId: "coingecko-default",
           messages: [],
         });
-        return { content: [{ type: "text", text: data.answer ?? JSON.stringify(data) }] };
+        let answer = data.answer ?? JSON.stringify(data);
+        if (a.userId) {
+          const tgMsg = `🔍 Token Data:\n\n${answer}`.slice(0, 4000) + "\n\n— via Noelclaw";
+          const notif = await notifyTelegram(a.userId, tgMsg);
+          if (!notif.sent && notif.reason === "no_config") answer += TELEGRAM_SETUP_HINT;
+          else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
+        }
+        return { content: [{ type: "text", text: answer }] };
       }
 
       case "run_research": {
