@@ -211,6 +211,64 @@ const TOOLS: Tool[] = [
       required: ["userId"],
     },
   },
+  {
+    name: "get_latest_signal",
+    description:
+      "Get the latest BTC and/or ETH trading signals from Noel. Includes entry price, take profit targets, stop loss, confidence score, and reasoning.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: {
+          type: "string",
+          description: "Token to get signal for: 'BTC', 'ETH', or 'both' (default: both)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_whale_alerts",
+    description:
+      "Get recent whale movement and smart money activity alerts for BTC and ETH.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hours: {
+          type: "number",
+          description: "How many hours back to look (default: 24)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_signal_history",
+    description:
+      "Get signal history with win/loss record and winrate statistics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: { type: "string", description: "BTC or ETH" },
+        days: { type: "number", description: "Number of days to look back (default: 7)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_daily_recap",
+    description:
+      "Get today's trading performance recap with winrate, PnL stats, and AI review.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description: "Date in YYYY-MM-DD format (default: today UTC)",
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 const server = new Server(
@@ -493,6 +551,98 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             ].filter(Boolean).join("\n"),
           }],
         };
+      }
+
+      case "get_latest_signal": {
+        const a = (args ?? {}) as { token?: string };
+        const tokenParam = a.token?.toUpperCase() ?? "both";
+        const data = await callConvex(
+          `/signals/latest${tokenParam !== "BOTH" && tokenParam !== "both" ? `?token=${encodeURIComponent(tokenParam)}` : ""}`,
+          "GET"
+        );
+        const lines: string[] = ["**Latest Noel Signals**", ""];
+        for (const [tok, sig] of Object.entries(data as Record<string, any>)) {
+          if (!sig) { lines.push(`**${tok}:** No signal available`, ""); continue; }
+          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
+          lines.push(
+            `${emoji} **${tok}/USD — ${sig.signalType}**`,
+            `Entry: $${sig.entryPrice?.toLocaleString()} | TP1: $${sig.target1?.toLocaleString()}${sig.target2 ? ` | TP2: $${sig.target2?.toLocaleString()}` : ""} | SL: $${sig.stopLoss?.toLocaleString()}`,
+            `Confidence: ${sig.confidence}% | Status: ${sig.status}`,
+            `📝 ${sig.reasoning}`,
+            "",
+          );
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_whale_alerts": {
+        const a = (args ?? {}) as { hours?: number };
+        const hours = a.hours ?? 24;
+        const data = await callConvex(`/whales/latest?hours=${hours}`, "GET");
+        if (!data.count) return { content: [{ type: "text", text: `No whale alerts in the last ${hours}h.` }] };
+        const lines: string[] = [`**Whale Alerts — Last ${hours}h** (${data.count} total)`, ""];
+        for (const alert of (data.alerts ?? []).slice(0, 5)) {
+          const sig = alert.significance === "HIGH" ? "🔴" : "🟡";
+          lines.push(
+            `${sig} **${alert.token} | ${alert.direction}**`,
+            `${alert.description}`,
+            `💡 ${alert.implication}`,
+            "",
+          );
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_signal_history": {
+        const a = (args ?? {}) as { token?: string; days?: number };
+        const token = a.token?.toUpperCase() ?? "BTC";
+        const days = a.days ?? 7;
+        const [hist, wr] = await Promise.all([
+          callConvex(`/signals/history?token=${token}&days=${days}`, "GET"),
+          callConvex(`/signals/winrate?token=${token}&days=${days}`, "GET"),
+        ]);
+        const lines: string[] = [
+          `**${token} Signal History — Last ${days} days**`,
+          `Total: ${wr.total} resolved | Wins: ${wr.wins} | Losses: ${wr.losses}`,
+          `Winrate: ${wr.winrate}% | Avg PnL: ${Number(wr.avgPnl) >= 0 ? "+" : ""}${wr.avgPnl}%`,
+          `Best: +${wr.bestPnl}% | Worst: ${wr.worstPnl}%`,
+          "",
+          "**Recent Signals:**",
+        ];
+        for (const sig of (hist.signals ?? []).slice(0, 5)) {
+          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
+          const outcome = sig.isWin === true ? "✅" : sig.isWin === false ? "❌" : "⏳";
+          const pnl = sig.pnlPercent != null ? ` (${sig.pnlPercent >= 0 ? "+" : ""}${sig.pnlPercent.toFixed(2)}%)` : "";
+          lines.push(`${emoji} ${sig.token} ${sig.signalType} @ $${sig.entryPrice?.toLocaleString()} — ${outcome} ${sig.status}${pnl}`);
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_daily_recap": {
+        const a = (args ?? {}) as { date?: string };
+        const date = a.date ?? new Date().toISOString().slice(0, 10);
+        let data: any;
+        try {
+          data = await callConvex("/recap/today", "GET");
+        } catch {
+          return { content: [{ type: "text", text: `No recap available for ${date}` }] };
+        }
+        if (data.error) return { content: [{ type: "text", text: data.error }] };
+        const lines: string[] = [
+          `**Noel Daily Recap — ${data.date ?? date}**`,
+          "",
+          `₿ **BTC** — ${data.btcWins}W / ${data.btcLosses}L | Winrate: ${data.btcWinrate?.toFixed(1)}%`,
+          `Best: +${data.btcBestPnl?.toFixed(2)}% | Worst: ${data.btcWorstPnl?.toFixed(2)}%`,
+          "",
+          `Ξ **ETH** — ${data.ethWins}W / ${data.ethLosses}L | Winrate: ${data.ethWinrate?.toFixed(1)}%`,
+          `Best: +${data.ethBestPnl?.toFixed(2)}% | Worst: ${data.ethWorstPnl?.toFixed(2)}%`,
+          "",
+          `**Overall:** ${data.totalWinrate?.toFixed(1)}% winrate | Avg PnL: ${Number(data.avgPnl) >= 0 ? "+" : ""}${data.avgPnl?.toFixed(2)}% per signal`,
+          "",
+          `🤖 AI Review:`,
+          data.aiReview ?? "No review",
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
       }
 
       default:
