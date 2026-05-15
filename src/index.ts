@@ -9,6 +9,18 @@ import {
 
 const CONVEX_SITE = process.env.NOELCLAW_CONVEX_URL ?? "https://valuable-fish-533.convex.site";
 
+const PRIVATE_KEY_RESPONSE = {
+  content: [{
+    type: "text" as const,
+    text: "I don't have access to your private key. Your wallet is secured by Noelclaw's encrypted vault. Only you can manage it at noelclaw.xyz",
+  }],
+};
+
+function containsSensitiveRequest(args: unknown): boolean {
+  const text = JSON.stringify(args ?? "").toLowerCase();
+  return text.includes("private key") || text.includes("seed phrase") || text.includes("mnemonic") || text.includes("privatekey");
+}
+
 async function callConvex(path: string, method: string, body?: unknown): Promise<any> {
   const url = `${CONVEX_SITE}${path}`;
   const res = await fetch(url, {
@@ -39,7 +51,7 @@ const TOOLS: Tool[] = [
   {
     name: "get_market_data",
     description:
-      "Get live crypto market data: top 20 coins by market cap, trending coins, and key prices for BTC/ETH/SOL. Results are also sent to your Telegram if configured. First-time: run set_telegram to configure your bot.",
+      "Get live crypto market data: top 20 coins by market cap, trending coins, and key prices for BTC/ETH/SOL. Results are also sent to your Telegram if configured.",
     inputSchema: {
       type: "object",
       properties: {
@@ -56,9 +68,208 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "get_token_data",
+    description:
+      "Get market data for specific tokens. Returns price, 24h change, market cap, and volume. Results are sent to your Telegram if configured.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description: "Describe which tokens to look up, e.g. 'show me data for ETH, SOL, and ARB'",
+        },
+        userId: {
+          type: "string",
+          description: "Your user ID — results will be sent to your Telegram bot if configured",
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
+    name: "get_latest_signal",
+    description:
+      "Get the latest BTC and/or ETH 1H trading signals from Noel. Includes entry price, take profit targets, stop loss, confidence score, and reasoning. Generated daily at 08:00 UTC.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: {
+          type: "string",
+          description: "Token to get signal for: 'BTC', 'ETH', or omit for both",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_signal_history",
+    description: "Get signal history with win/loss record and winrate statistics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: { type: "string", description: "BTC or ETH" },
+        days: { type: "number", description: "Number of days to look back (default: 7)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_whale_alerts",
+    description: "Get recent whale movement and smart money activity alerts for BTC and ETH.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hours: {
+          type: "number",
+          description: "How many hours back to look (default: 24)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_daily_recap",
+    description: "Get today's trading performance recap with winrate, PnL stats, and AI review.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description: "Date in YYYY-MM-DD format (default: today UTC)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_research_report",
+    description: "Get the latest research report for a specific token (e.g. 'ETH', 'SOL').",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token: {
+          type: "string",
+          description: "Token symbol to get the report for, e.g. 'ETH'",
+        },
+      },
+      required: ["token"],
+    },
+  },
+  {
+    name: "get_research_status",
+    description:
+      "Get the status of Noel's research shift: active job details (elapsed time, remaining time, report count) and the last 3 reports.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: {
+          type: "string",
+          description: "User ID to check research status for",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "run_research",
+    description:
+      "Trigger Noel's autonomous research cycle on demand. Returns structured findings with confidence scores.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: {
+          type: "string",
+          description: "Optional user ID to associate research with",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "start_research",
+    description:
+      "Start Noel's 8-hour autonomous research shift. Noel collects market data every 30 minutes, sends interim reports at 2.5h and 5h, and a final report at 8h — all via Telegram.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: {
+          type: "string",
+          description: "User ID to associate the research shift with",
+        },
+        telegramChatId: {
+          type: "string",
+          description: "Telegram chat ID to send reports to (optional, uses default if not provided)",
+        },
+        token: {
+          type: "string",
+          description: "Specific token to focus on e.g. 'ETH', 'SOL' (optional)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "stop_research",
+    description: "Stop Noel's active research shift.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: {
+          type: "string",
+          description: "User ID whose active shift should be stopped",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_portfolio",
+    description:
+      "Get your Base wallet address and full token portfolio including all token balances with USD values. Auto-creates a secure encrypted wallet on first use.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+      },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "swap_tokens",
+    description:
+      "Swap tokens on Base mainnet via 0x Permit2. Supported: ETH, USDC, USDT, DAI, WETH. Amount in smallest unit (wei for ETH/WETH, 6 decimals for USDC/USDT, 18 for DAI). Auto-creates wallet on first use.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        fromToken: { type: "string", description: "Token to sell: ETH, USDC, USDT, DAI, WETH" },
+        toToken: { type: "string", description: "Token to buy: ETH, USDC, USDT, DAI, WETH" },
+        amount: {
+          type: "string",
+          description: "Amount in smallest unit (e.g. '1000000' = 1 USDC, '1000000000000000000' = 1 ETH)",
+        },
+      },
+      required: ["userId", "fromToken", "toToken", "amount"],
+    },
+  },
+  {
+    name: "send_token",
+    description: "Send ETH or ERC-20 tokens (USDC, USDT, DAI, WETH) to any address on Base mainnet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        token: { type: "string", description: "Token to send: ETH, USDC, USDT, DAI, WETH" },
+        toAddress: { type: "string", description: "Destination address (0x...)" },
+        amount: { type: "string", description: "Amount in smallest unit" },
+      },
+      required: ["userId", "token", "toAddress", "amount"],
+    },
+  },
+  {
     name: "ask_noel",
     description:
-      "Ask Noel, a crypto AI agent with DeFi trading intelligence and live market context. Best for analysis, trade ideas, and DeFi questions. Results are sent to your Telegram if configured.",
+      "Ask Noel AI for DeFi analysis, trade ideas, market outlook, and crypto research. Noel has live market context. Results are sent to your Telegram if configured.",
     inputSchema: {
       type: "object",
       properties: {
@@ -87,142 +298,9 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "get_token_data",
-    description:
-      "Get market data for specific tokens. Returns price, 24h change, market cap, and volume in a clean list. Results are sent to your Telegram if configured.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        question: {
-          type: "string",
-          description:
-            "Describe which tokens to look up, e.g. 'show me data for ETH, SOL, and ARB'",
-        },
-        userId: {
-          type: "string",
-          description: "Your user ID — results will be sent to your Telegram bot if configured",
-        },
-      },
-      required: ["question"],
-    },
-  },
-  {
-    name: "run_research",
-    description:
-      "Trigger Noel's autonomous research cycle on demand. Noel fetches live market data, analyzes trends, and returns structured findings with confidence scores.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "Optional user ID to associate research with (defaults to anonymous)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "start_research",
-    description:
-      "Start Noel's 8-hour autonomous research shift. Noel collects market data every 30 minutes, sends interim reports at 2.5h and 5h, and a final comprehensive report at 8h — all via Telegram.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "User ID to associate the research shift with",
-        },
-        telegramChatId: {
-          type: "string",
-          description: "Telegram chat ID to send reports to (optional, uses default if not provided)",
-        },
-        token: {
-          type: "string",
-          description: "Specific token symbol to focus on e.g. 'ETH', 'SOL' (optional, tracks whole market if not set)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "stop_research",
-    description:
-      "Stop Noel's active research shift. Terminates data collection and report scheduling for the given user.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "User ID whose active shift should be stopped",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_research_status",
-    description:
-      "Get the status of Noel's research shift: active job details (elapsed time, remaining time, report count) and the last 3 reports.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "User ID to check research status for",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_research_report",
-    description:
-      "Get the latest research report for a specific token (e.g. 'ETH', 'SOL'). Returns the most recent report generated during a shift that was tracking that token.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        token: {
-          type: "string",
-          description: "Token symbol to get the report for, e.g. 'ETH'",
-        },
-      },
-      required: ["token"],
-    },
-  },
-  {
-    name: "create_wallet",
-    description:
-      "Create a Base mainnet wallet for a user (MCP/agent context). Returns the wallet address. If the user already has a wallet, returns the existing one.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "User ID to create the wallet for",
-        },
-      },
-      required: ["userId"],
-    },
-  },
-  {
-    name: "get_wallet_balance",
-    description:
-      "Get the ETH and USDC balance for a user's Base mainnet wallet created via MCP.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: {
-          type: "string",
-          description: "User ID to get wallet balance for",
-        },
-      },
-      required: ["userId"],
-    },
-  },
-  {
     name: "set_telegram",
     description:
-      "Configure a user's personal Telegram bot token and chat ID for receiving Noel research reports. Users must set this up before starting a research shift to receive Telegram notifications.",
+      "Configure your personal Telegram bot token and chat ID for Noel notifications — signals, whale alerts, research reports, and market data.",
     inputSchema: {
       type: "object",
       properties: {
@@ -236,123 +314,8 @@ const TOOLS: Tool[] = [
         },
         telegramChatId: {
           type: "string",
-          description: "Telegram chat ID to send messages to (your personal chat ID or a group)",
+          description: "Telegram chat ID to send messages to",
         },
-      },
-      required: ["userId"],
-    },
-  },
-  {
-    name: "get_latest_signal",
-    description:
-      "Get the latest BTC and/or ETH trading signals from Noel. Includes entry price, take profit targets, stop loss, confidence score, and reasoning.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        token: {
-          type: "string",
-          description: "Token to get signal for: 'BTC', 'ETH', or 'both' (default: both)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_whale_alerts",
-    description:
-      "Get recent whale movement and smart money activity alerts for BTC and ETH.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        hours: {
-          type: "number",
-          description: "How many hours back to look (default: 24)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_signal_history",
-    description:
-      "Get signal history with win/loss record and winrate statistics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        token: { type: "string", description: "BTC or ETH" },
-        days: { type: "number", description: "Number of days to look back (default: 7)" },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_daily_recap",
-    description:
-      "Get today's trading performance recap with winrate, PnL stats, and AI review.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        date: {
-          type: "string",
-          description: "Date in YYYY-MM-DD format (default: today UTC)",
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "connect_wallet",
-    description:
-      "Create or retrieve a Base mainnet DeFi wallet (Privy Server Wallet). Returns the wallet address. Run this before swap_tokens, send_token, deploy_token, or get_portfolio.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: { type: "string", description: "Your user ID" },
-      },
-      required: ["userId"],
-    },
-  },
-  {
-    name: "swap_tokens",
-    description:
-      "Swap tokens on Base mainnet via 0x Permit2. Supports ETH, USDC, USDT, DAI, WETH. Amount in smallest unit (wei for ETH/WETH, 6 decimals for USDC/USDT, 18 for DAI).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: { type: "string", description: "Your user ID" },
-        fromToken: { type: "string", description: "Token to sell: ETH, USDC, USDT, DAI, WETH" },
-        toToken: { type: "string", description: "Token to buy: ETH, USDC, USDT, DAI, WETH" },
-        amount: {
-          type: "string",
-          description: "Amount in smallest unit (e.g. '1000000' = 1 USDC, '1000000000000000000' = 1 ETH)",
-        },
-      },
-      required: ["userId", "fromToken", "toToken", "amount"],
-    },
-  },
-  {
-    name: "send_token",
-    description:
-      "Send ETH or ERC-20 tokens (USDC, USDT, DAI, WETH) to any address on Base mainnet.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: { type: "string", description: "Your user ID" },
-        token: { type: "string", description: "Token to send: ETH, USDC, USDT, DAI, WETH" },
-        toAddress: { type: "string", description: "Destination address (0x...)" },
-        amount: { type: "string", description: "Amount in smallest unit" },
-      },
-      required: ["userId", "token", "toAddress", "amount"],
-    },
-  },
-  {
-    name: "get_portfolio",
-    description:
-      "Get the token balances and total USD value for a user's DeFi wallet on Base mainnet.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        userId: { type: "string", description: "Your user ID" },
       },
       required: ["userId"],
     },
@@ -360,7 +323,7 @@ const TOOLS: Tool[] = [
 ];
 
 const server = new Server(
-  { name: "noelclaw", version: "1.3.4" },
+  { name: "noelclaw", version: "1.4.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -368,6 +331,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  if (containsSensitiveRequest(args)) return PRIVATE_KEY_RESPONSE;
 
   try {
     switch (name) {
@@ -422,23 +387,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text }] };
       }
 
-      case "ask_noel": {
-        const a = args as { question: string; messages?: unknown[]; userId?: string };
-        const data = await callConvex("/mcp/chat", "POST", {
-          question: a.question,
-          agentId: "noel-default",
-          messages: a.messages ?? [],
-        });
-        let answer = data.answer ?? JSON.stringify(data);
-        if (a.userId) {
-          const tgMsg = `🤖 Noel:\n\n${answer}`.slice(0, 4000) + "\n\n— via Noelclaw";
-          const notif = await notifyTelegram(a.userId, tgMsg);
-          if (!notif.sent && notif.reason === "no_config") answer += TELEGRAM_SETUP_HINT;
-          else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
-        }
-        return { content: [{ type: "text", text: answer }] };
-      }
-
       case "get_token_data": {
         const a = args as { question: string; userId?: string };
         const data = await callConvex("/mcp/chat", "POST", {
@@ -454,6 +402,161 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
         }
         return { content: [{ type: "text", text: answer }] };
+      }
+
+      case "get_latest_signal": {
+        const a = (args ?? {}) as { token?: string };
+        const tokenParam = a.token?.toUpperCase() ?? "both";
+        const data = await callConvex(
+          `/signals/latest${tokenParam !== "BOTH" && tokenParam !== "both" ? `?token=${encodeURIComponent(tokenParam)}` : ""}`,
+          "GET"
+        );
+        const lines: string[] = ["**Latest Noel Signals**", ""];
+        for (const [tok, sig] of Object.entries(data as Record<string, any>)) {
+          if (!sig) { lines.push(`**${tok}:** No signal available`, ""); continue; }
+          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
+          lines.push(
+            `${emoji} **${tok}/USD — ${sig.signalType}**`,
+            `Entry: $${sig.entryPrice?.toLocaleString()} | TP1: $${sig.target1?.toLocaleString()}${sig.target2 ? ` | TP2: $${sig.target2?.toLocaleString()}` : ""} | SL: $${sig.stopLoss?.toLocaleString()}`,
+            `Confidence: ${sig.confidence}% | Status: ${sig.status}`,
+            `📝 ${sig.reasoning}`,
+            "",
+          );
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_signal_history": {
+        const a = (args ?? {}) as { token?: string; days?: number };
+        const token = a.token?.toUpperCase() ?? "BTC";
+        const days = a.days ?? 7;
+        const [hist, wr] = await Promise.all([
+          callConvex(`/signals/history?token=${token}&days=${days}`, "GET"),
+          callConvex(`/signals/winrate?token=${token}&days=${days}`, "GET"),
+        ]);
+        const lines: string[] = [
+          `**${token} Signal History — Last ${days} days**`,
+          `Total: ${wr.total} resolved | Wins: ${wr.wins} | Losses: ${wr.losses}`,
+          `Winrate: ${wr.winrate}% | Avg PnL: ${Number(wr.avgPnl) >= 0 ? "+" : ""}${wr.avgPnl}%`,
+          `Best: +${wr.bestPnl}% | Worst: ${wr.worstPnl}%`,
+          "",
+          "**Recent Signals:**",
+        ];
+        for (const sig of (hist.signals ?? []).slice(0, 5)) {
+          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
+          const outcome = sig.isWin === true ? "✅" : sig.isWin === false ? "❌" : "⏳";
+          const pnl = sig.pnlPercent != null ? ` (${sig.pnlPercent >= 0 ? "+" : ""}${sig.pnlPercent.toFixed(2)}%)` : "";
+          lines.push(`${emoji} ${sig.token} ${sig.signalType} @ $${sig.entryPrice?.toLocaleString()} — ${outcome} ${sig.status}${pnl}`);
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_whale_alerts": {
+        const a = (args ?? {}) as { hours?: number };
+        const hours = a.hours ?? 24;
+        const data = await callConvex(`/whales/latest?hours=${hours}`, "GET");
+        if (!data.count) return { content: [{ type: "text", text: `No whale alerts in the last ${hours}h.` }] };
+        const lines: string[] = [`**Whale Alerts — Last ${hours}h** (${data.count} total)`, ""];
+        for (const alert of (data.alerts ?? []).slice(0, 5)) {
+          const sig = alert.significance === "HIGH" ? "🔴" : "🟡";
+          lines.push(
+            `${sig} **${alert.token} | ${alert.direction}**`,
+            `${alert.description}`,
+            `💡 ${alert.implication}`,
+            "",
+          );
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_daily_recap": {
+        const a = (args ?? {}) as { date?: string };
+        const date = a.date ?? new Date().toISOString().slice(0, 10);
+        let data: any;
+        try {
+          data = await callConvex("/recap/today", "GET");
+        } catch {
+          return { content: [{ type: "text", text: `No recap available for ${date}` }] };
+        }
+        if (data.error) return { content: [{ type: "text", text: data.error }] };
+        const lines: string[] = [
+          `**Noel Daily Recap — ${data.date ?? date}**`,
+          "",
+          `₿ **BTC** — ${data.btcWins}W / ${data.btcLosses}L | Winrate: ${data.btcWinrate?.toFixed(1)}%`,
+          `Best: +${data.btcBestPnl?.toFixed(2)}% | Worst: ${data.btcWorstPnl?.toFixed(2)}%`,
+          "",
+          `Ξ **ETH** — ${data.ethWins}W / ${data.ethLosses}L | Winrate: ${data.ethWinrate?.toFixed(1)}%`,
+          `Best: +${data.ethBestPnl?.toFixed(2)}% | Worst: ${data.ethWorstPnl?.toFixed(2)}%`,
+          "",
+          `**Overall:** ${data.totalWinrate?.toFixed(1)}% winrate | Avg PnL: ${Number(data.avgPnl) >= 0 ? "+" : ""}${data.avgPnl?.toFixed(2)}% per signal`,
+          "",
+          `🤖 AI Review:`,
+          data.aiReview ?? "No review",
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_research_report": {
+        const a = args as { token: string };
+        const data = await callConvex(
+          `/mcp/research/report?token=${encodeURIComponent(a.token)}`,
+          "GET"
+        );
+        if (!data || data.error) {
+          return { content: [{ type: "text", text: `No report found for ${a.token}` }] };
+        }
+        const r = data.result ?? {};
+        const lines: string[] = [
+          `**Latest Research Report — ${a.token.toUpperCase()}**`,
+          `Generated: ${data.generatedAt ? new Date(data.generatedAt).toUTCString() : "unknown"}`,
+          `Type: ${data.type ?? "unknown"} | Outlook: ${r.marketOutlook ?? "neutral"}`,
+          "",
+          r.shortSummary ?? "",
+        ];
+        if (r.fullAnalysis) {
+          lines.push("", "**Analysis:**", r.fullAnalysis.slice(0, 1000));
+        }
+        const impacts: any[] = r.impacts ?? [];
+        if (impacts.length) {
+          lines.push("", "**Key Signals:**");
+          for (const f of impacts.slice(0, 4)) {
+            const e = f.sentiment === "bullish" ? "🟢" : f.sentiment === "bearish" ? "🔴" : "🟡";
+            lines.push(`${e} ${f.title} — ${f.detail ?? ""}`);
+          }
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "get_research_status": {
+        const a = (args ?? {}) as { userId?: string };
+        const data = await callConvex(
+          `/mcp/research/status?userId=${encodeURIComponent(a.userId ?? "mcp-anonymous")}`,
+          "GET"
+        );
+        const lines: string[] = ["**Noel Research Status**", ""];
+
+        if (data.activeJob) {
+          const j = data.activeJob;
+          lines.push(`**Active Shift**`);
+          lines.push(`• Status: running`);
+          lines.push(`• Elapsed: ${j.elapsedMinutes} min`);
+          lines.push(`• Remaining: ${j.remainingMinutes} min`);
+          lines.push(`• Interim reports sent: ${j.interimReportsCount}/2`);
+          lines.push(`• Final report sent: ${j.finalReportSent ? "yes" : "no"}`);
+        } else {
+          lines.push(`**No active shift.** Use \`start_research\` to begin.`);
+        }
+
+        if (data.recentReports?.length) {
+          lines.push("", "**Recent Reports**");
+          for (const r of data.recentReports) {
+            const emoji = r.outlook === "bullish" ? "🟢" : r.outlook === "bearish" ? "🔴" : "🟡";
+            lines.push(`${emoji} [${r.type.toUpperCase()}] ${r.generatedAt}`);
+            if (r.summary) lines.push(`   ${r.summary}`);
+          }
+        }
+
+        return { content: [{ type: "text", text: lines.join("\n") }] };
       }
 
       case "run_research": {
@@ -546,240 +649,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "get_research_status": {
-        const a = (args ?? {}) as { userId?: string };
-        const data = await callConvex(
-          `/mcp/research/status?userId=${encodeURIComponent(a.userId ?? "mcp-anonymous")}`,
-          "GET"
-        );
-        const lines: string[] = ["**Noel Research Status**", ""];
-
-        if (data.activeJob) {
-          const j = data.activeJob;
-          lines.push(`**Active Shift**`);
-          lines.push(`• Status: running`);
-          lines.push(`• Elapsed: ${j.elapsedMinutes} min`);
-          lines.push(`• Remaining: ${j.remainingMinutes} min`);
-          lines.push(`• Interim reports sent: ${j.interimReportsCount}/2`);
-          lines.push(`• Final report sent: ${j.finalReportSent ? "yes" : "no"}`);
-        } else {
-          lines.push(`**No active shift.** Use \`start_research\` to begin.`);
-        }
-
-        if (data.recentReports?.length) {
-          lines.push("", "**Recent Reports**");
-          for (const r of data.recentReports) {
-            const emoji = r.outlook === "bullish" ? "🟢" : r.outlook === "bearish" ? "🔴" : "🟡";
-            lines.push(`${emoji} [${r.type.toUpperCase()}] ${r.generatedAt}`);
-            if (r.summary) lines.push(`   ${r.summary}`);
-          }
-        }
-
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "get_research_report": {
-        const a = args as { token: string };
-        const data = await callConvex(
-          `/mcp/research/report?token=${encodeURIComponent(a.token)}`,
-          "GET"
-        );
-        if (!data || data.error) {
-          return { content: [{ type: "text", text: `No report found for ${a.token}` }] };
-        }
-        const r = data.result ?? {};
-        const lines: string[] = [
-          `**Latest Research Report — ${a.token.toUpperCase()}**`,
-          `Generated: ${data.generatedAt ? new Date(data.generatedAt).toUTCString() : "unknown"}`,
-          `Type: ${data.type ?? "unknown"} | Outlook: ${r.marketOutlook ?? "neutral"}`,
-          "",
-          r.shortSummary ?? "",
-        ];
-        if (r.fullAnalysis) {
-          lines.push("", "**Analysis:**", r.fullAnalysis.slice(0, 1000));
-        }
-        const impacts: any[] = r.impacts ?? [];
-        if (impacts.length) {
-          lines.push("", "**Key Signals:**");
-          for (const f of impacts.slice(0, 4)) {
-            const e = f.sentiment === "bullish" ? "🟢" : f.sentiment === "bearish" ? "🔴" : "🟡";
-            lines.push(`${e} ${f.title} — ${f.detail ?? ""}`);
-          }
-        }
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "create_wallet": {
+      case "get_portfolio": {
         const a = args as { userId: string };
-        const data = await callConvex("/mcp/wallet/create", "POST", { userId: a.userId });
-        return {
-          content: [{
-            type: "text",
-            text: data.existing
-              ? `Wallet already exists:\n**Address:** \`${data.address}\`\nNetwork: Base Mainnet`
-              : `✅ Wallet created!\n**Address:** \`${data.address}\`\nNetwork: Base Mainnet\n\nFund with ETH and USDC to start trading.`,
-          }],
-        };
-      }
-
-      case "get_wallet_balance": {
-        const a = args as { userId: string };
-        const data = await callConvex(
-          `/mcp/wallet/balance?userId=${encodeURIComponent(a.userId)}`,
-          "GET"
-        );
-        if (!data || data.error) {
-          return { content: [{ type: "text", text: `No wallet found. Use create_wallet first.` }] };
-        }
-        return {
-          content: [{
-            type: "text",
-            text: [
-              `**Wallet Balance** (${data.network})`,
-              `Address: \`${data.address}\``,
-              ``,
-              `ETH: ${data.eth}`,
-              `USDC: $${data.usdc}`,
-            ].join("\n"),
-          }],
-        };
-      }
-
-      case "set_telegram": {
-        const a = args as { userId: string; telegramBotToken?: string; telegramChatId?: string };
-        await callConvex("/user/telegram", "POST", {
-          userId: a.userId,
-          telegramBotToken: a.telegramBotToken,
-          telegramChatId: a.telegramChatId,
-        });
-        return {
-          content: [{
-            type: "text",
-            text: [
-              `✅ Telegram config saved for user ${a.userId}.`,
-              a.telegramBotToken ? `Bot token: set` : ``,
-              a.telegramChatId ? `Chat ID: ${a.telegramChatId}` : ``,
-              ``,
-              `Noel will now send research reports to your Telegram bot.`,
-            ].filter(Boolean).join("\n"),
-          }],
-        };
-      }
-
-      case "get_latest_signal": {
-        const a = (args ?? {}) as { token?: string };
-        const tokenParam = a.token?.toUpperCase() ?? "both";
-        const data = await callConvex(
-          `/signals/latest${tokenParam !== "BOTH" && tokenParam !== "both" ? `?token=${encodeURIComponent(tokenParam)}` : ""}`,
-          "GET"
-        );
-        const lines: string[] = ["**Latest Noel Signals**", ""];
-        for (const [tok, sig] of Object.entries(data as Record<string, any>)) {
-          if (!sig) { lines.push(`**${tok}:** No signal available`, ""); continue; }
-          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
-          lines.push(
-            `${emoji} **${tok}/USD — ${sig.signalType}**`,
-            `Entry: $${sig.entryPrice?.toLocaleString()} | TP1: $${sig.target1?.toLocaleString()}${sig.target2 ? ` | TP2: $${sig.target2?.toLocaleString()}` : ""} | SL: $${sig.stopLoss?.toLocaleString()}`,
-            `Confidence: ${sig.confidence}% | Status: ${sig.status}`,
-            `📝 ${sig.reasoning}`,
-            "",
-          );
-        }
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "get_whale_alerts": {
-        const a = (args ?? {}) as { hours?: number };
-        const hours = a.hours ?? 24;
-        const data = await callConvex(`/whales/latest?hours=${hours}`, "GET");
-        if (!data.count) return { content: [{ type: "text", text: `No whale alerts in the last ${hours}h.` }] };
-        const lines: string[] = [`**Whale Alerts — Last ${hours}h** (${data.count} total)`, ""];
-        for (const alert of (data.alerts ?? []).slice(0, 5)) {
-          const sig = alert.significance === "HIGH" ? "🔴" : "🟡";
-          lines.push(
-            `${sig} **${alert.token} | ${alert.direction}**`,
-            `${alert.description}`,
-            `💡 ${alert.implication}`,
-            "",
-          );
-        }
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "get_signal_history": {
-        const a = (args ?? {}) as { token?: string; days?: number };
-        const token = a.token?.toUpperCase() ?? "BTC";
-        const days = a.days ?? 7;
-        const [hist, wr] = await Promise.all([
-          callConvex(`/signals/history?token=${token}&days=${days}`, "GET"),
-          callConvex(`/signals/winrate?token=${token}&days=${days}`, "GET"),
-        ]);
-        const lines: string[] = [
-          `**${token} Signal History — Last ${days} days**`,
-          `Total: ${wr.total} resolved | Wins: ${wr.wins} | Losses: ${wr.losses}`,
-          `Winrate: ${wr.winrate}% | Avg PnL: ${Number(wr.avgPnl) >= 0 ? "+" : ""}${wr.avgPnl}%`,
-          `Best: +${wr.bestPnl}% | Worst: ${wr.worstPnl}%`,
-          "",
-          "**Recent Signals:**",
+        const data = await callConvex(`/mcp/defi/portfolio?userId=${encodeURIComponent(a.userId)}`, "GET");
+        if (data.error) return { content: [{ type: "text", text: `Portfolio error: ${data.error}` }], isError: true };
+        const lines = [
+          `**Portfolio — Base Mainnet**`,
+          `Address: \`${data.address}\``,
+          ``,
+          `**Balances**`,
         ];
-        for (const sig of (hist.signals ?? []).slice(0, 5)) {
-          const emoji = sig.signalType === "BUY" ? "🟢" : sig.signalType === "SELL" ? "🔴" : "🟡";
-          const outcome = sig.isWin === true ? "✅" : sig.isWin === false ? "❌" : "⏳";
-          const pnl = sig.pnlPercent != null ? ` (${sig.pnlPercent >= 0 ? "+" : ""}${sig.pnlPercent.toFixed(2)}%)` : "";
-          lines.push(`${emoji} ${sig.token} ${sig.signalType} @ $${sig.entryPrice?.toLocaleString()} — ${outcome} ${sig.status}${pnl}`);
+        for (const b of (data.balances ?? [])) {
+          lines.push(`• ${b.token}: ${b.balance}${b.valueUsd ? ` (~$${Number(b.valueUsd).toFixed(2)})` : ""}`);
         }
+        lines.push(``, `**Total Value:** ~$${Number(data.totalValueUsd ?? 0).toFixed(2)}`);
         return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "get_daily_recap": {
-        const a = (args ?? {}) as { date?: string };
-        const date = a.date ?? new Date().toISOString().slice(0, 10);
-        let data: any;
-        try {
-          data = await callConvex("/recap/today", "GET");
-        } catch {
-          return { content: [{ type: "text", text: `No recap available for ${date}` }] };
-        }
-        if (data.error) return { content: [{ type: "text", text: data.error }] };
-        const lines: string[] = [
-          `**Noel Daily Recap — ${data.date ?? date}**`,
-          "",
-          `₿ **BTC** — ${data.btcWins}W / ${data.btcLosses}L | Winrate: ${data.btcWinrate?.toFixed(1)}%`,
-          `Best: +${data.btcBestPnl?.toFixed(2)}% | Worst: ${data.btcWorstPnl?.toFixed(2)}%`,
-          "",
-          `Ξ **ETH** — ${data.ethWins}W / ${data.ethLosses}L | Winrate: ${data.ethWinrate?.toFixed(1)}%`,
-          `Best: +${data.ethBestPnl?.toFixed(2)}% | Worst: ${data.ethWorstPnl?.toFixed(2)}%`,
-          "",
-          `**Overall:** ${data.totalWinrate?.toFixed(1)}% winrate | Avg PnL: ${Number(data.avgPnl) >= 0 ? "+" : ""}${data.avgPnl?.toFixed(2)}% per signal`,
-          "",
-          `🤖 AI Review:`,
-          data.aiReview ?? "No review",
-        ];
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      case "connect_wallet": {
-        const a = args as { userId: string };
-        const data = await callConvex("/mcp/defi/connect", "POST", { userId: a.userId });
-        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
-        return {
-          content: [{
-            type: "text",
-            text: [
-              data.existing ? `Wallet already exists:` : `✅ New DeFi wallet created!`,
-              `**Address:** \`${data.address}\``,
-              `Network: Base Mainnet`,
-              ``,
-              `Fund with ETH or USDC on Base, then use swap_tokens, send_token, or get_portfolio.`,
-            ].join("\n"),
-          }],
-        };
       }
 
       case "swap_tokens": {
         const a = args as { userId: string; fromToken: string; toToken: string; amount: string };
         const data = await callConvex("/mcp/defi/swap", "POST", a);
-        if (data.error === "NO_WALLET") return { content: [{ type: "text", text: `No wallet found. Run connect_wallet first.` }], isError: true };
         if (data.error) return { content: [{ type: "text", text: `Swap failed: ${data.error}` }], isError: true };
         return {
           content: [{
@@ -798,7 +687,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "send_token": {
         const a = args as { userId: string; token: string; toAddress: string; amount: string };
         const data = await callConvex("/mcp/defi/send", "POST", a);
-        if (data.error === "NO_WALLET") return { content: [{ type: "text", text: `No wallet found. Run connect_wallet first.` }], isError: true };
         if (data.error) return { content: [{ type: "text", text: `Send failed: ${data.error}` }], isError: true };
         return {
           content: [{
@@ -814,22 +702,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "get_portfolio": {
-        const a = args as { userId: string };
-        const data = await callConvex(`/mcp/defi/portfolio?userId=${encodeURIComponent(a.userId)}`, "GET");
-        if (data.error === "NO_WALLET") return { content: [{ type: "text", text: `No wallet found. Run connect_wallet first.` }], isError: true };
-        if (data.error) return { content: [{ type: "text", text: `Portfolio error: ${data.error}` }], isError: true };
-        const lines = [
-          `**Portfolio — Base Mainnet**`,
-          `Address: \`${data.address}\``,
-          ``,
-          `**Balances**`,
-        ];
-        for (const b of (data.balances ?? [])) {
-          lines.push(`• ${b.token}: ${b.balance}${b.valueUsd ? ` (~$${Number(b.valueUsd).toFixed(2)})` : ""}`);
+      case "ask_noel": {
+        const a = args as { question: string; messages?: unknown[]; userId?: string };
+        const data = await callConvex("/mcp/chat", "POST", {
+          question: a.question,
+          agentId: "noel-default",
+          messages: a.messages ?? [],
+        });
+        let answer = data.answer ?? JSON.stringify(data);
+        if (a.userId) {
+          const tgMsg = `🤖 Noel:\n\n${answer}`.slice(0, 4000) + "\n\n— via Noelclaw";
+          const notif = await notifyTelegram(a.userId, tgMsg);
+          if (!notif.sent && notif.reason === "no_config") answer += TELEGRAM_SETUP_HINT;
+          else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
         }
-        lines.push(``, `**Total Value:** ~$${Number(data.totalValueUsd ?? 0).toFixed(2)}`);
-        return { content: [{ type: "text", text: lines.join("\n") }] };
+        return { content: [{ type: "text", text: answer }] };
+      }
+
+      case "set_telegram": {
+        const a = args as { userId: string; telegramBotToken?: string; telegramChatId?: string };
+        await callConvex("/user/telegram", "POST", {
+          userId: a.userId,
+          telegramBotToken: a.telegramBotToken,
+          telegramChatId: a.telegramChatId,
+        });
+        return {
+          content: [{
+            type: "text",
+            text: [
+              `✅ Telegram config saved for user ${a.userId}.`,
+              a.telegramBotToken ? `Bot token: set` : ``,
+              a.telegramChatId ? `Chat ID: ${a.telegramChatId}` : ``,
+              ``,
+              `Noel will now send research reports, signals, and whale alerts to your Telegram bot.`,
+            ].filter(Boolean).join("\n"),
+          }],
+        };
       }
 
       default:
