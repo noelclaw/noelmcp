@@ -236,6 +236,54 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "create_automation",
+    description:
+      "Create an automation in plain English. Supports DCA (buy X daily), price alerts, conditional buys/sells, and recurring market updates. Examples: 'Buy 50 USDC of ETH every day. Stop after spending 500 USDC', 'If ETH drops 5%, buy $100', 'Alert me when BTC dominance drops below 50%', 'Sell 20% of my ETH if it's up 3x'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID — the wallet that will execute the automation" },
+        rawInput: { type: "string", description: "Plain English description of the automation" },
+      },
+      required: ["userId", "rawInput"],
+    },
+  },
+  {
+    name: "list_automations",
+    description: "List all your automations — active, paused, and completed — with status, run counts, and next scheduled run.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+      },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "pause_automation",
+    description: "Pause or resume an automation by ID. Paused automations won't run until resumed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        automationId: { type: "string", description: "Automation ID (from list_automations)" },
+      },
+      required: ["userId", "automationId"],
+    },
+  },
+  {
+    name: "delete_automation",
+    description: "Permanently delete an automation. Cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        automationId: { type: "string", description: "Automation ID (from list_automations)" },
+      },
+      required: ["userId", "automationId"],
+    },
+  },
+  {
     name: "set_telegram",
     description:
       "Configure your personal Telegram bot token and chat ID for Noel notifications — signals, whale alerts, research reports, and market data.",
@@ -261,7 +309,7 @@ const TOOLS: Tool[] = [
 ];
 
 const server = new Server(
-  { name: "noelclaw", version: "1.5.0" },
+  { name: "noelclaw", version: "1.6.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -518,6 +566,89 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           else if (notif.sent) answer += "\n\n✅ _Sent to your Telegram._";
         }
         return { content: [{ type: "text", text: answer }] };
+      }
+
+      case "create_automation": {
+        const a = args as { userId: string; rawInput: string };
+        const data = await callConvex("/automations/create", "POST", {
+          userId: a.userId,
+          rawInput: a.rawInput,
+        });
+        if (!data.success) {
+          return { content: [{ type: "text", text: `Failed: ${data.error}` }], isError: true };
+        }
+        const triggerLabel: Record<string, string> = {
+          schedule: "⏰ Schedule",
+          price_drop_pct: "📉 Price Drop %",
+          price_rise_pct: "📈 Price Rise %",
+          price_below: "⬇️ Price Below",
+          price_above: "⬆️ Price Above",
+          dominance_below: "📊 Dominance Below",
+          dominance_above: "📊 Dominance Above",
+        };
+        const actionLabel: Record<string, string> = { swap: "💱 Swap", send: "📤 Send", alert: "🔔 Alert" };
+        return {
+          content: [{
+            type: "text",
+            text: [
+              `✅ **Automation Created**`,
+              ``,
+              `**Name:** ${data.name}`,
+              `**ID:** \`${data.automationId}\``,
+              `**Trigger:** ${triggerLabel[data.triggerType] ?? data.triggerType}`,
+              `**Action:** ${actionLabel[data.actionType] ?? data.actionType}`,
+              data.priceBaselineUsd ? `**Baseline price:** $${Number(data.priceBaselineUsd).toLocaleString()}` : ``,
+              ``,
+              `Use \`list_automations\` to see all your automations.`,
+            ].filter(Boolean).join("\n"),
+          }],
+        };
+      }
+
+      case "list_automations": {
+        const a = args as { userId: string };
+        const data = await callConvex(`/automations/list?userId=${encodeURIComponent(a.userId)}`, "GET");
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+
+        const automations: any[] = data.automations ?? [];
+        if (!automations.length) {
+          return { content: [{ type: "text", text: "No automations yet. Use `create_automation` to create one." }] };
+        }
+
+        const statusIcon: Record<string, string> = { active: "🟢", paused: "⏸️", completed: "✅", error: "❌" };
+        const lines: string[] = [`**Your Automations** (${automations.length})`, ""];
+        for (const auto of automations) {
+          lines.push(`${statusIcon[auto.status] ?? "•"} **${auto.name}** — \`${auto._id}\``);
+          lines.push(`  Trigger: ${auto.triggerType} | Action: ${auto.actionType} | Runs: ${auto.totalRuns}`);
+          if (auto.totalSpentUsd > 0) lines.push(`  Total spent: $${Number(auto.totalSpentUsd).toFixed(2)}`);
+          if (auto.nextRunAt && auto.status === "active") {
+            lines.push(`  Next run: ${new Date(auto.nextRunAt).toUTCString()}`);
+          }
+          if (auto.lastError) lines.push(`  ⚠️ Last error: ${auto.lastError}`);
+          lines.push("");
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "pause_automation": {
+        const a = args as { userId: string; automationId: string };
+        const data = await callConvex("/automations/pause", "POST", {
+          automationId: a.automationId,
+          userId: a.userId,
+        });
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+        const icon = data.status === "active" ? "▶️ Resumed" : "⏸️ Paused";
+        return { content: [{ type: "text", text: `${icon} successfully.` }] };
+      }
+
+      case "delete_automation": {
+        const a = args as { userId: string; automationId: string };
+        const data = await callConvex("/automations/delete", "POST", {
+          automationId: a.automationId,
+          userId: a.userId,
+        });
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+        return { content: [{ type: "text", text: "🗑️ Automation deleted." }] };
       }
 
       case "set_telegram": {
