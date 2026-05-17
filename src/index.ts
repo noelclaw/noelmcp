@@ -284,6 +284,93 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "start_swarm",
+    description:
+      "Start the multi-agent swarm for autonomous market monitoring, sentiment tracking, and workflow execution. Agents coordinate through shared memory and improve over time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        config: {
+          type: "object",
+          description: "Optional swarm config",
+          properties: {
+            enabledAgents: {
+              type: "array",
+              items: { type: "string" },
+              description: "Agent IDs to enable: market-monitor, sentiment-tracker, workflow-executor, memory-manager, risk-verifier",
+            },
+            byok: { type: "boolean", description: "Use your own Bankr API key" },
+          },
+        },
+      },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "stop_swarm",
+    description: "Stop the active swarm session for a user.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+      },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "get_swarm_status",
+    description:
+      "Get the current status of the swarm: active agents, shared memory snapshot, execution scores, and recent runs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+      },
+      required: ["userId"],
+    },
+  },
+  {
+    name: "write_swarm_memory",
+    description:
+      "Write a key-value pair to the swarm's shared memory. Used by agents to coordinate state across the swarm.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        agentId: { type: "string", description: "ID of the agent writing this memory entry" },
+        key: { type: "string", description: "Memory key (e.g. 'last_signal', 'btc_sentiment')" },
+        value: { type: "string", description: "Value to store (JSON-serializable string)" },
+        ttlSeconds: { type: "number", description: "Optional TTL in seconds — entry is auto-deleted after this" },
+      },
+      required: ["userId", "agentId", "key", "value"],
+    },
+  },
+  {
+    name: "get_swarm_memory",
+    description: "Read a value from the swarm's shared memory by key.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+        key: { type: "string", description: "Memory key to read" },
+      },
+      required: ["userId", "key"],
+    },
+  },
+  {
+    name: "get_execution_scores",
+    description:
+      "Get the self-improvement scores for all skills. Shows which workflows are performing best, success/fail rates, and adapted thresholds.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        userId: { type: "string", description: "Your user ID" },
+      },
+      required: ["userId"],
+    },
+  },
+  {
     name: "set_telegram",
     description:
       "Configure your personal Telegram bot token and chat ID for Noel notifications — signals, whale alerts, research reports, and market data.",
@@ -649,6 +736,113 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
         return { content: [{ type: "text", text: "🗑️ Automation deleted." }] };
+      }
+
+      case "start_swarm": {
+        const a = args as { userId: string; config?: { enabledAgents?: string[]; byok?: boolean } };
+        const data = await callConvex("/swarm/start", "POST", { userId: a.userId, config: a.config });
+        if (!data.success) return { content: [{ type: "text", text: `Failed: ${data.error}` }], isError: true };
+        const agents: string[] = data.activeAgents ?? [];
+        return {
+          content: [{
+            type: "text",
+            text: [
+              `🤖 **Swarm Started**`,
+              `Status: ${data.status}`,
+              `Active agents (${agents.length}): ${agents.join(", ")}`,
+              ``,
+              `Use \`get_swarm_status\` to monitor, \`stop_swarm\` to stop.`,
+            ].join("\n"),
+          }],
+        };
+      }
+
+      case "stop_swarm": {
+        const a = args as { userId: string };
+        const data = await callConvex("/swarm/stop", "POST", { userId: a.userId });
+        if (!data.success) return { content: [{ type: "text", text: `Failed: ${data.error}` }], isError: true };
+        return { content: [{ type: "text", text: `⏹️ Swarm stopped.` }] };
+      }
+
+      case "get_swarm_status": {
+        const a = args as { userId: string };
+        const data = await callConvex(`/swarm/status?userId=${encodeURIComponent(a.userId)}`, "GET");
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+
+        const job = data.job;
+        const memory: any[] = data.memory ?? [];
+        const scores: any[] = data.scores ?? [];
+
+        const lines: string[] = [
+          `🤖 **Swarm Status**`,
+          job ? `Status: ${job.status} | Agents: ${(job.activeAgents ?? []).join(", ")}` : `No active swarm.`,
+          ``,
+        ];
+
+        if (memory.length > 0) {
+          lines.push(`**Shared Memory** (${memory.length} entries)`);
+          for (const m of memory.slice(0, 5)) {
+            lines.push(`• [${m.agentId}] ${m.key}: ${m.value.slice(0, 80)}`);
+          }
+          if (memory.length > 5) lines.push(`  …and ${memory.length - 5} more`);
+          lines.push("");
+        }
+
+        if (scores.length > 0) {
+          lines.push(`**Execution Scores** (top skills)`);
+          const sorted = scores.sort((a, b) => b.lastScore - a.lastScore).slice(0, 5);
+          for (const s of sorted) {
+            lines.push(`• ${s.skillName}: ${(s.lastScore * 100).toFixed(0)}% | ${s.successCount}W/${s.failCount}L | avg ${Math.round(s.avgDurationMs / 1000)}s`);
+          }
+        }
+
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+
+      case "write_swarm_memory": {
+        const a = args as { userId: string; agentId: string; key: string; value: string; ttlSeconds?: number };
+        await callConvex("/swarm/memory/write", "POST", {
+          userId: a.userId, agentId: a.agentId, key: a.key, value: a.value, ttlSeconds: a.ttlSeconds,
+        });
+        return {
+          content: [{
+            type: "text",
+            text: `✅ Memory written: [${a.agentId}] ${a.key}${a.ttlSeconds ? ` (expires in ${a.ttlSeconds}s)` : ""}`,
+          }],
+        };
+      }
+
+      case "get_swarm_memory": {
+        const a = args as { userId: string; key: string };
+        const data = await callConvex(`/swarm/memory?userId=${encodeURIComponent(a.userId)}&key=${encodeURIComponent(a.key)}`, "GET");
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+        if (data.value === null || data.value === undefined) {
+          return { content: [{ type: "text", text: `No value found for key: ${a.key}` }] };
+        }
+        return { content: [{ type: "text", text: `**${a.key}**: ${data.value}` }] };
+      }
+
+      case "get_execution_scores": {
+        const a = args as { userId: string };
+        const data = await callConvex(`/swarm/scores?userId=${encodeURIComponent(a.userId)}`, "GET");
+        if (data.error) return { content: [{ type: "text", text: `Error: ${data.error}` }], isError: true };
+
+        const scores: any[] = data.scores ?? [];
+        if (!scores.length) {
+          return { content: [{ type: "text", text: "No execution scores yet. Run some swarm agents to build a history." }] };
+        }
+
+        const sorted = scores.sort((a, b) => b.lastScore - a.lastScore);
+        const lines = [
+          `**Execution Scores — ${a.userId}**`,
+          ``,
+          `| Skill | Score | W | L | Avg Duration | Last Adapted |`,
+          `|-------|-------|---|---|--------------|--------------|`,
+          ...sorted.map((s) =>
+            `| ${s.skillName} | ${(s.lastScore * 100).toFixed(0)}% | ${s.successCount} | ${s.failCount} | ${Math.round(s.avgDurationMs / 1000)}s | ${new Date(s.lastAdaptedAt).toUTCString()} |`
+          ),
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
       }
 
       case "set_telegram": {
