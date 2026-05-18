@@ -1,9 +1,11 @@
 # @noelclaw/research
 
+[![npm version](https://img.shields.io/npm/v/@noelclaw/research.svg)](https://www.npmjs.com/package/@noelclaw/research) ![version](https://img.shields.io/badge/version-1.7.4-blue)
+
 Noelclaw as an MCP skill — market intelligence, autonomous research, DeFi execution, and multi-agent swarm coordination. Gives Claude, Cursor, Hermes, and any MCP-compatible AI client access to live crypto signals, whale tracking, on-chain DeFi, and a self-improving agent swarm — all backed by real-time intelligence via Bankr.
 
 ```bash
-npx @noelclaw/research
+npx @noelclaw/research@latest
 ```
 
 ---
@@ -21,17 +23,18 @@ npx @noelclaw/research
 | `get_smart_money_alerts` | Smart money and insider wallet movements for micro-cap tokens on Base, Solana, and ETH |
 | `get_daily_recap` | Today's trading performance recap with winrate, PnL stats, and AI review |
 
-### Research
+### Research & AI
 
 | Tool | Description |
 |------|-------------|
 | `research` | On-demand crypto research — like Perplexity but for crypto. Returns structured analysis: overview, key findings, market impact, affected tokens, sentiment, and what to watch |
+| `ask_noel` | Ask Noel AI for DeFi analysis, trade ideas, market outlook, and crypto research — with live market context |
 
 ### Wallet & DeFi
 
 | Tool | Description |
 |------|-------------|
-| `get_portfolio` | Full token portfolio on Base mainnet with balances and total USD value. Auto-creates a wallet on first use |
+| `get_portfolio` | Full token portfolio on Base mainnet with ETH and ERC-20 balances via Alchemy RPC |
 | `swap_tokens` | Swap ETH, USDC, USDT, DAI, WETH on Base mainnet via 0x Permit2 |
 | `send_token` | Send ETH or any ERC-20 token to any address on Base mainnet |
 
@@ -44,14 +47,7 @@ npx @noelclaw/research
 | `pause_automation` | Pause or resume an automation by ID |
 | `delete_automation` | Permanently delete an automation |
 
-### Config
-
-| Tool | Description |
-|------|-------------|
-| `ask_noel` | Ask Noel AI for DeFi analysis, trade ideas, market outlook, and crypto research — with live market context |
-| `set_telegram` | Configure your personal Telegram bot to receive signals, whale alerts, research reports, and market data |
-
-### Swarm — new in v1.7.0
+### Swarm
 
 | Tool | Description |
 |------|-------------|
@@ -69,13 +65,13 @@ npx @noelclaw/research
 ### Recommended: npx (no install required)
 
 ```bash
-npx @noelclaw/research
+npx @noelclaw/research@latest
 ```
 
 ### Claude Code
 
 ```bash
-claude mcp add noelclaw -- npx @noelclaw/research
+claude mcp add noelclaw -- npx @noelclaw/research@latest
 ```
 
 ### Claude Desktop
@@ -87,7 +83,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or 
   "mcpServers": {
     "noelclaw": {
       "command": "npx",
-      "args": ["@noelclaw/research"]
+      "args": ["@noelclaw/research@latest"]
     }
   }
 }
@@ -104,7 +100,7 @@ Open **Settings → MCP** or edit `~/.cursor/mcp.json`:
   "mcpServers": {
     "noelclaw": {
       "command": "npx",
-      "args": ["@noelclaw/research"]
+      "args": ["@noelclaw/research@latest"]
     }
   }
 }
@@ -113,7 +109,7 @@ Open **Settings → MCP** or edit `~/.cursor/mcp.json`:
 ### Hermes Agent
 
 ```bash
-hermes mcp add noelclaw --command npx --args @noelclaw/research
+hermes mcp add noelclaw --command npx --args @noelclaw/research@latest
 ```
 
 Or in your Hermes config:
@@ -123,7 +119,7 @@ mcp_servers:
   noelclaw:
     command: npx
     args:
-      - "@noelclaw/research"
+      - "@noelclaw/research@latest"
 ```
 
 ### OpenClaw / custom MCP client
@@ -133,7 +129,7 @@ mcp_servers:
   "servers": {
     "noelclaw": {
       "command": "npx",
-      "args": ["@noelclaw/research"],
+      "args": ["@noelclaw/research@latest"],
       "env": {
         "NOELCLAW_CONVEX_URL": "https://your-deployment.convex.site"
       }
@@ -173,23 +169,18 @@ research(query: "What is happening with the Base ecosystem this week?")
 
 **Check your portfolio and swap:**
 ```
-get_portfolio(userId: "your-user-id")
-swap_tokens(userId: "your-user-id", fromToken: "ETH", toToken: "USDC", amount: "1000000000000000000")
+get_portfolio
+swap_tokens(fromToken: "ETH", toToken: "USDC", amount: "1000000000000000000")
 ```
 
 **Create a DCA automation:**
 ```
-create_automation(userId: "your-user-id", rawInput: "Buy 50 USDC of ETH every day. Stop after spending 500 USDC.")
-```
-
-**Set up Telegram delivery:**
-```
-set_telegram(userId: "your-user-id", telegramBotToken: "...", telegramChatId: "...")
+create_automation(rawInput: "Buy 50 USDC of ETH every day. Stop after spending 500 USDC.")
 ```
 
 ---
 
-## Agent Swarm (v1.7.0)
+## Agent Swarm
 
 The swarm is a system of 5 coordinated agents that run autonomously and improve over time. Each agent has a specific role, but they all share a common memory layer — so a price fetched by the market monitor is immediately available to the workflow executor when deciding whether to trigger an automation.
 
@@ -199,30 +190,30 @@ The swarm is a system of 5 coordinated agents that run autonomously and improve 
 |-------|------|
 | `market-monitor` | Fetches live prices and detects significant price moves. Writes market data to shared memory with a 5-minute TTL. Fires alerts when price change exceeds a configurable threshold |
 | `sentiment-tracker` | Analyses sentiment for tokens from on-chain signals. Caches results for 15 minutes. Writes sentiment alerts when score crosses ±0.5 |
-| `workflow-executor` | Finds due automations and executes them — swaps, sends, and Telegram alerts. Reads token prices from shared memory to convert USD amounts to chain units |
+| `workflow-executor` | Finds due automations and executes them — swaps, sends, and alerts. Reads token prices from shared memory to convert USD amounts to chain units |
 | `memory-manager` | Watches shared memory size. When entries exceed 50, it uses an LLM to compress the oldest 20 into a summary, then deletes the originals. Keeps the swarm lean |
 | `risk-verifier` | Gates high-value actions with a fast LLM risk check. Rejected actions trigger a 10-minute cooldown on that action type. Approved actions are cached for 1 hour |
 
 **How agents coordinate:**
 
 - All agents read and write to a shared `swarmMemory` key-value store
-- Every agent run is logged to `agentRuns` and scored in `executionScores`
+- Every agent run is logged and scored in `executionScores`
 - The coordinator tracks win rate and average duration per skill, then adapts thresholds automatically (via cron every 30 minutes)
 - The swarm heartbeat runs every 5 minutes — jobs that go stale for 15+ minutes are auto-paused
 
 **Example workflow:**
 
 ```
-1. start_swarm(userId: "your-user-id")
+1. start_swarm
    → Starts all 5 agents
 
-2. get_swarm_status(userId: "your-user-id")
+2. get_swarm_status
    → See active agents, shared memory snapshot, top execution scores
 
-3. get_execution_scores(userId: "your-user-id")
+3. get_execution_scores
    → See which workflows are improving over time (score, W/L, avg duration)
 
-4. stop_swarm(userId: "your-user-id")
+4. stop_swarm
    → Stops the swarm cleanly
 ```
 
@@ -234,51 +225,29 @@ Heavy swarm usage — especially the market monitor, sentiment tracker, and memo
 2. Pass `byok: true` in the `config` when calling `start_swarm`
 
 ```
-start_swarm(userId: "your-user-id", config: { byok: true, enabledAgents: ["market-monitor", "risk-verifier"] })
+start_swarm(config: { byok: true, enabledAgents: ["market-monitor", "risk-verifier"] })
 ```
 
 ---
 
-## Optional: Point to a Custom Deployment
+## Authentication
 
-By default the MCP server uses Noelclaw's hosted backend. To use your own Convex deployment:
+### Wallet-native auth (automatic — no config needed)
 
-```bash
-NOELCLAW_CONVEX_URL="https://your-deployment.convex.site" npx @noelclaw/research
-```
+Starting from v1.7.4, the MCP server auto-generates a wallet on first run and signs every request automatically. Your wallet address is your identity — no account, no API key, no setup required.
 
-Or set it in your MCP config's `env`:
+The wallet is stored encrypted at `~/.noelclaw/wallet.json` on your machine. It is derived from a machine key and never leaves your device.
+
+### Session token (optional — for web users)
+
+If you have a Noelclaw account, you can link your session for access to your account's automations, saved settings, and linked wallets:
 
 ```json
 {
   "mcpServers": {
     "noelclaw": {
       "command": "npx",
-      "args": ["@noelclaw/research"],
-      "env": {
-        "NOELCLAW_CONVEX_URL": "https://your-deployment.convex.site"
-      }
-    }
-  }
-}
-```
-
----
-
-## x402 Micropayments (v1.7.0)
-
-Most tools require either a **Noelclaw session token** or a **USDC micropayment** on Base mainnet. Free tools (market data, signals, whale alerts, recap) pass through without auth.
-
-### Option A — Session token (recommended)
-
-Get your session token from noelclaw.xyz → Settings → API. Set it in your MCP client config:
-
-```json
-{
-  "mcpServers": {
-    "noelclaw": {
-      "command": "npx",
-      "args": ["@noelclaw/research"],
+      "args": ["@noelclaw/research@latest"],
       "env": {
         "NOELCLAW_SESSION_TOKEN": "your-session-token"
       }
@@ -287,14 +256,15 @@ Get your session token from noelclaw.xyz → Settings → API. Set it in your MC
 }
 ```
 
-### Option B — Per-call USDC payment
+Get your session token from noelclaw.xyz → Settings → API Keys.
+
+### Per-call USDC payment (x402)
+
+Paid tools can also be accessed via a single USDC micropayment on Base mainnet, without any account:
 
 1. Call any paid tool — you'll get a 402 response with the amount, wallet address, and request ID
 2. Send the exact USDC amount to the wallet on Base mainnet
-3. Copy your transaction hash and build the payment header:
-   ```
-   base64("<txHash>:<requestId>")
-   ```
+3. Build the payment header: `base64("<txHash>:<requestId>")`
 4. Set `NOELCLAW_PAYMENT_HEADER` in your MCP config env and retry
 
 ```json
@@ -309,19 +279,48 @@ Each payment header is single-use. Clear `NOELCLAW_PAYMENT_HEADER` after the too
 
 ### Tool prices
 
-| Tool | USDC |
-|------|------|
-| `get_market_data`, `get_latest_signal`, `get_signal_history`, `get_smart_money_alerts`, `get_daily_recap` | Free |
-| `get_token_data`, `get_portfolio`, `create_automation` | $0.05 |
-| `research`, `ask_noel`, `start_swarm` | $0.10 |
-| `list_automations`, `pause_automation`, `delete_automation`, `set_telegram`, `stop_swarm`, swarm reads | $0.01 |
-| `swap_tokens`, `send_token` | $0.25 |
+| Tool | Price (USDC) |
+|------|-------------|
+| `get_market_data`, `get_token_data`, `get_latest_signal`, `get_signal_history` | Free |
+| `get_swarm_status`, `get_execution_scores`, `write_swarm_memory`, `get_swarm_memory` | Free |
+| `list_automations`, `pause_automation`, `delete_automation`, `stop_swarm` | Free |
+| `get_portfolio` | $0.002 |
+| `get_smart_money_alerts`, `get_daily_recap`, `ask_noel`, `swap_tokens`, `send_token` | $0.005 |
+| `create_automation` | $0.01 |
+| `research`, `start_swarm` | $0.02 |
+
+---
+
+## Optional: Point to a Custom Deployment
+
+By default the MCP server uses Noelclaw's hosted backend. To use your own Convex deployment:
+
+```bash
+NOELCLAW_CONVEX_URL="https://your-deployment.convex.site" npx @noelclaw/research@latest
+```
+
+Or set it in your MCP config's `env`:
+
+```json
+{
+  "mcpServers": {
+    "noelclaw": {
+      "command": "npx",
+      "args": ["@noelclaw/research@latest"],
+      "env": {
+        "NOELCLAW_CONVEX_URL": "https://your-deployment.convex.site"
+      }
+    }
+  }
+}
+```
 
 ### Convex env vars (self-hosted deployments only)
 
 | Var | Description |
 |-----|-------------|
 | `NOEL_WALLET_ADDRESS` | Your wallet address to receive USDC payments |
+| `ALCHEMY_API_KEY` | Alchemy API key for Base mainnet portfolio queries |
 | `BASE_RPC_URL` | Optional Base mainnet RPC (defaults to `https://mainnet.base.org`) |
 
 Set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` in your Convex project.
@@ -333,14 +332,14 @@ Set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` in your Convex project.
 | Error | Fix |
 |-------|-----|
 | `BANKR_API_KEY not set` | Set via `npx convex env set BANKR_API_KEY "..."` in your Convex project |
-| `TELEGRAM_BOT_TOKEN not set` | Set via `npx convex env set TELEGRAM_BOT_TOKEN "..."` |
+| `ALCHEMY_API_KEY not set` | Set via `npx convex env set ALCHEMY_API_KEY "..."` in your Convex project |
 | Tools not appearing | Restart your MCP client after adding the config |
 | `Noelclaw API error: 404` | Wrong `NOELCLAW_CONVEX_URL` or Convex functions not deployed |
 | Server starts but no response | Expected — it waits for MCP stdin, not HTTP |
 | Swarm not starting | Make sure Convex is deployed with the swarm files (`swarm.ts`, `swarmCoordinator.ts`, `swarmDb.ts`) |
 | `get_swarm_status` returns empty | Start the swarm first with `start_swarm` |
 | High token usage in swarm | Enable BYOK in your user settings to use your own Bankr API key |
-| `Payment required` on every call | Set `NOELCLAW_SESSION_TOKEN` in your MCP config env (get it from noelclaw.xyz → Settings → API) |
+| `Payment required` on every call | Upgrade to v1.7.4 — wallet auth is automatic in this version |
 | `Payment already used` error | Each `NOELCLAW_PAYMENT_HEADER` is single-use — clear it after a successful call |
 | `No matching USDC transfer found` | Make sure you sent to the exact address and amount shown in the 402 response |
 | `NOEL_WALLET_ADDRESS not configured` | Self-hosted only — set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` |
