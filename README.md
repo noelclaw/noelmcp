@@ -129,14 +129,21 @@ mcp_servers:
   "servers": {
     "noelclaw": {
       "command": "npx",
-      "args": ["@noelclaw/research@latest"],
-      "env": {
-        "NOELCLAW_CONVEX_URL": "https://your-deployment.convex.site"
-      }
+      "args": ["@noelclaw/research@latest"]
     }
   }
 }
 ```
+
+### Optional env vars
+
+No env vars are required. These are available if needed:
+
+| Var | Default | Description |
+|-----|---------|-------------|
+| `NOELCLAW_CONVEX_URL` | Noelclaw hosted backend | Override to point at a self-hosted Convex deployment |
+| `NOELCLAW_SESSION_TOKEN` | — | Link to your noelclaw.xyz account for saved settings and automations |
+| `ALCHEMY_API_KEY` | Public Base RPC | Alchemy key for faster/more reliable swap and send execution |
 
 ---
 
