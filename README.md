@@ -1,8 +1,8 @@
 # @noelclaw/research
 
-[![npm version](https://img.shields.io/npm/v/@noelclaw/research.svg)](https://www.npmjs.com/package/@noelclaw/research) ![version](https://img.shields.io/badge/version-1.7.4-blue)
+[![npm version](https://img.shields.io/npm/v/@noelclaw/research.svg)](https://www.npmjs.com/package/@noelclaw/research) ![version](https://img.shields.io/badge/version-1.9.0-blue)
 
-Noelclaw as an MCP skill — market intelligence, autonomous research, DeFi execution, and multi-agent swarm coordination. Gives Claude, Cursor, Hermes, and any MCP-compatible AI client access to live crypto signals, whale tracking, on-chain DeFi, and a self-improving agent swarm — all backed by real-time intelligence via Bankr.
+Noelclaw as an MCP skill — market intelligence, autonomous research, DeFi execution, and multi-agent swarm coordination. Gives Claude, Cursor, Hermes, and any MCP-compatible AI client access to live crypto signals, whale tracking, on-chain DeFi, and a self-improving agent swarm.
 
 ```bash
 npx @noelclaw/research@latest
@@ -29,13 +29,14 @@ npx @noelclaw/research@latest
 |------|-------------|
 | `research` | On-demand crypto research — like Perplexity but for crypto. Returns structured analysis: overview, key findings, market impact, affected tokens, sentiment, and what to watch |
 | `ask_noel` | Ask Noel AI for DeFi analysis, trade ideas, market outlook, and crypto research — with live market context |
+| `get_insight` | Noel's on-demand crypto + macro briefing — what's happening right now in crypto, macro, and X/Twitter narratives |
 
 ### Wallet & DeFi
 
 | Tool | Description |
 |------|-------------|
-| `get_portfolio` | Full token portfolio on Base mainnet with ETH and ERC-20 balances via Alchemy RPC |
-| `swap_tokens` | Swap ETH, USDC, USDT, DAI, WETH on Base mainnet via 0x Permit2 |
+| `get_portfolio` | Full token portfolio on Base mainnet with ETH and ERC-20 balances and USD values |
+| `swap_tokens` | Swap ETH, USDC, USDT, DAI, WETH on Base mainnet via 0x Permit2 — human-readable amounts |
 | `send_token` | Send ETH or any ERC-20 token to any address on Base mainnet |
 
 ### Automations
@@ -135,15 +136,60 @@ mcp_servers:
 }
 ```
 
-### Optional env vars
+---
+
+## Environment Variables
 
 No env vars are required. These are available if needed:
 
+### Auth & Session
+
+| Var | Description |
+|-----|-------------|
+| `NOELCLAW_API_KEY` | Link to your noelclaw.xyz account (`noel_sk_xxx` from Settings → API Keys) |
+| `NOELCLAW_SESSION_TOKEN` | Alternative session token from noelclaw.xyz |
+
+### DeFi
+
+| Var | Description |
+|-----|-------------|
+| `ALCHEMY_API_KEY` | Alchemy key for faster/more reliable swap and portfolio queries on Base |
+
+### BYOK (Bring Your Own Key)
+
+Forward your own API keys to the server — used instead of platform defaults when present:
+
+| Var | Forwarded as | Used for |
+|-----|-------------|---------|
+| `GROK_API_KEY` | `X-User-Grok-Key` | X.AI Grok — `get_insight`, signal generation |
+| `BANKR_API_KEY` | `X-User-Bankr-Key` | Bankr Agent — swarm agents, research |
+| `TELEGRAM_BOT_TOKEN` | `X-User-Telegram-Token` | Your personal Telegram bot |
+| `TELEGRAM_CHAT_ID` | `X-User-Telegram-Chat` | Your Telegram chat ID |
+
+Example with BYOK keys in Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "noelclaw": {
+      "command": "npx",
+      "args": ["@noelclaw/research@latest"],
+      "env": {
+        "NOELCLAW_API_KEY": "noel_sk_xxx",
+        "GROK_API_KEY": "xai-xxx",
+        "ALCHEMY_API_KEY": "your-alchemy-key"
+      }
+    }
+  }
+}
+```
+
+### Advanced
+
 | Var | Default | Description |
 |-----|---------|-------------|
-| `NOELCLAW_CONVEX_URL` | Noelclaw hosted backend | Override to point at a self-hosted Convex deployment |
-| `NOELCLAW_SESSION_TOKEN` | — | Link to your noelclaw.xyz account for saved settings and automations |
-| `ALCHEMY_API_KEY` | Public Base RPC | Alchemy key for faster/more reliable swap and send execution |
+| `NOELCLAW_CONVEX_URL` | `https://api.noelclaw.xyz` | Override to point at a self-hosted deployment |
+| `NOELCLAW_PAYMENT_HEADER` | — | Payment proof header for x402 micropayments (single-use) |
 
 ---
 
@@ -152,6 +198,11 @@ No env vars are required. These are available if needed:
 **Get live market data:**
 ```
 get_market_data
+```
+
+**Get a fresh crypto + macro briefing:**
+```
+get_insight
 ```
 
 **Ask Noel a question:**
@@ -164,7 +215,7 @@ ask_noel(question: "Is ETH forming a breakout on the 1H chart?")
 get_latest_signal(token: "BTC")
 ```
 
-**Check smart money activity:**
+**Check smart money activity in the last 6 hours:**
 ```
 get_smart_money_alerts(hours: 6)
 ```
@@ -174,15 +225,21 @@ get_smart_money_alerts(hours: 6)
 research(query: "What is happening with the Base ecosystem this week?")
 ```
 
-**Check your portfolio and swap:**
+**Check your portfolio and swap 0.01 ETH to USDC:**
 ```
 get_portfolio
-swap_tokens(fromToken: "ETH", toToken: "USDC", amount: "1000000000000000000")
+swap_tokens(fromToken: "ETH", toToken: "USDC", amount: "0.01")
 ```
 
 **Create a DCA automation:**
 ```
 create_automation(rawInput: "Buy 50 USDC of ETH every day. Stop after spending 500 USDC.")
+```
+
+**Start the agent swarm:**
+```
+start_swarm
+get_swarm_status
 ```
 
 ---
@@ -195,41 +252,38 @@ The swarm is a system of 5 coordinated agents that run autonomously and improve 
 
 | Agent | Role |
 |-------|------|
-| `market-monitor` | Fetches live prices and detects significant price moves. Writes market data to shared memory with a 5-minute TTL. Fires alerts when price change exceeds a configurable threshold |
-| `sentiment-tracker` | Analyses sentiment for tokens from on-chain signals. Caches results for 15 minutes. Writes sentiment alerts when score crosses ±0.5 |
-| `workflow-executor` | Finds due automations and executes them — swaps, sends, and alerts. Reads token prices from shared memory to convert USD amounts to chain units |
-| `memory-manager` | Watches shared memory size. When entries exceed 50, it uses an LLM to compress the oldest 20 into a summary, then deletes the originals. Keeps the swarm lean |
-| `risk-verifier` | Gates high-value actions with a fast LLM risk check. Rejected actions trigger a 10-minute cooldown on that action type. Approved actions are cached for 1 hour |
+| `market-monitor` | Fetches live prices and detects significant price moves. Writes market data to shared memory with a 5-minute TTL |
+| `sentiment-tracker` | Analyses token sentiment from on-chain signals. Caches results for 15 minutes. Fires alerts when score crosses ±0.5 |
+| `workflow-executor` | Finds due automations and executes them — swaps, sends, and alerts |
+| `memory-manager` | Watches shared memory size. When entries exceed 50, compresses the oldest 20 into a summary and deletes the originals |
+| `risk-verifier` | Gates high-value actions with a fast risk check. Rejected actions trigger a 10-minute cooldown |
 
 **How agents coordinate:**
 
 - All agents read and write to a shared `swarmMemory` key-value store
-- Every agent run is logged and scored in `executionScores`
-- The coordinator tracks win rate and average duration per skill, then adapts thresholds automatically (via cron every 30 minutes)
-- The swarm heartbeat runs every 5 minutes — jobs that go stale for 15+ minutes are auto-paused
+- Every run is logged and scored in `executionScores`
+- The coordinator tracks win rate and average duration per skill, then adapts thresholds automatically every 30 minutes
+- The swarm heartbeat runs every 5 minutes — stale jobs are auto-paused
 
 **Example workflow:**
 
 ```
-1. start_swarm
-   → Starts all 5 agents
+start_swarm
+→ starts all 5 agents
 
-2. get_swarm_status
-   → See active agents, shared memory snapshot, top execution scores
+get_swarm_status
+→ active agents, shared memory snapshot, top execution scores
 
-3. get_execution_scores
-   → See which workflows are improving over time (score, W/L, avg duration)
+get_execution_scores
+→ which workflows are improving over time
 
-4. stop_swarm
-   → Stops the swarm cleanly
+stop_swarm
+→ stops cleanly
 ```
 
-**BYOK (Bring Your Own Bankr API Key):**
+**BYOK:**
 
-Heavy swarm usage — especially the market monitor, sentiment tracker, and memory manager — calls the Bankr LLM gateway. By default, Noelclaw's platform key is used. To use your own:
-
-1. Set `useOwnKey: true` and your `bankrApiKey` in your user settings on noelclaw.xyz
-2. Pass `byok: true` in the `config` when calling `start_swarm`
+Heavy swarm usage calls the Bankr LLM gateway. Set `BANKR_API_KEY` in your MCP env to use your own key instead of the platform default:
 
 ```
 start_swarm(config: { byok: true, enabledAgents: ["market-monitor", "risk-verifier"] })
@@ -241,13 +295,13 @@ start_swarm(config: { byok: true, enabledAgents: ["market-monitor", "risk-verifi
 
 ### Wallet-native auth (automatic — no config needed)
 
-Starting from v1.7.4, the MCP server auto-generates a wallet on first run and signs every request automatically. Your wallet address is your identity — no account, no API key, no setup required.
+The MCP server auto-generates a wallet on first run and signs every request automatically. Your wallet address is your identity — no account, no API key, no setup required.
 
-The wallet is stored encrypted at `~/.noelclaw/wallet.json` on your machine. It is derived from a machine key and never leaves your device.
+The wallet is stored encrypted at `~/.noelclaw/wallet.json`. It is derived from a machine key and never leaves your device.
 
-### Session token (optional — for web users)
+### API key (optional — for account features)
 
-If you have a Noelclaw account, you can link your session for access to your account's automations, saved settings, and linked wallets:
+Link to your noelclaw.xyz account for access to your saved automations, settings, and linked wallets:
 
 ```json
 {
@@ -256,18 +310,18 @@ If you have a Noelclaw account, you can link your session for access to your acc
       "command": "npx",
       "args": ["@noelclaw/research@latest"],
       "env": {
-        "NOELCLAW_SESSION_TOKEN": "your-session-token"
+        "NOELCLAW_API_KEY": "noel_sk_xxx"
       }
     }
   }
 }
 ```
 
-Get your session token from noelclaw.xyz → Settings → API Keys.
+Get your API key from noelclaw.xyz → Settings → API Keys.
 
 ### Per-call USDC payment (x402)
 
-Paid tools can also be accessed via a single USDC micropayment on Base mainnet, without any account:
+Paid tools can also be accessed via a single USDC micropayment on Base mainnet without any account:
 
 1. Call any paid tool — you'll get a 402 response with the amount, wallet address, and request ID
 2. Send the exact USDC amount to the wallet on Base mainnet
@@ -282,7 +336,7 @@ Paid tools can also be accessed via a single USDC micropayment on Base mainnet, 
 }
 ```
 
-Each payment header is single-use. Clear `NOELCLAW_PAYMENT_HEADER` after the tool call succeeds.
+Each payment header is single-use. Clear it after the tool call succeeds.
 
 ### Tool prices
 
@@ -292,45 +346,10 @@ Each payment header is single-use. Clear `NOELCLAW_PAYMENT_HEADER` after the too
 | `get_swarm_status`, `get_execution_scores`, `write_swarm_memory`, `get_swarm_memory` | Free |
 | `list_automations`, `pause_automation`, `delete_automation`, `stop_swarm` | Free |
 | `get_portfolio` | $0.002 |
-| `get_smart_money_alerts`, `get_daily_recap`, `ask_noel`, `swap_tokens`, `send_token` | $0.005 |
+| `get_smart_money_alerts`, `get_daily_recap`, `ask_noel`, `get_insight` | $0.005 |
+| `swap_tokens`, `send_token` | $0.005 |
 | `create_automation` | $0.01 |
 | `research`, `start_swarm` | $0.02 |
-
----
-
-## Optional: Point to a Custom Deployment
-
-By default the MCP server uses Noelclaw's hosted backend. To use your own Convex deployment:
-
-```bash
-NOELCLAW_CONVEX_URL="https://your-deployment.convex.site" npx @noelclaw/research@latest
-```
-
-Or set it in your MCP config's `env`:
-
-```json
-{
-  "mcpServers": {
-    "noelclaw": {
-      "command": "npx",
-      "args": ["@noelclaw/research@latest"],
-      "env": {
-        "NOELCLAW_CONVEX_URL": "https://your-deployment.convex.site"
-      }
-    }
-  }
-}
-```
-
-### Convex env vars (self-hosted deployments only)
-
-| Var | Description |
-|-----|-------------|
-| `NOEL_WALLET_ADDRESS` | Your wallet address to receive USDC payments |
-| `ALCHEMY_API_KEY` | Alchemy API key for Base mainnet portfolio queries |
-| `BASE_RPC_URL` | Optional Base mainnet RPC (defaults to `https://mainnet.base.org`) |
-
-Set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` in your Convex project.
 
 ---
 
@@ -339,17 +358,15 @@ Set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` in your Convex project.
 | Error | Fix |
 |-------|-----|
 | `BANKR_API_KEY not set` | Set via `npx convex env set BANKR_API_KEY "..."` in your Convex project |
-| `ALCHEMY_API_KEY not set` | Set via `npx convex env set ALCHEMY_API_KEY "..."` in your Convex project |
 | Tools not appearing | Restart your MCP client after adding the config |
 | `Noelclaw API error: 404` | Wrong `NOELCLAW_CONVEX_URL` or Convex functions not deployed |
 | Server starts but no response | Expected — it waits for MCP stdin, not HTTP |
-| Swarm not starting | Make sure Convex is deployed with the swarm files (`swarm.ts`, `swarmCoordinator.ts`, `swarmDb.ts`) |
+| Swarm not starting | Make sure Convex is deployed with the swarm files |
 | `get_swarm_status` returns empty | Start the swarm first with `start_swarm` |
-| High token usage in swarm | Enable BYOK in your user settings to use your own Bankr API key |
-| `Payment required` on every call | Upgrade to v1.7.4 — wallet auth is automatic in this version |
+| High token usage in swarm | Set `BANKR_API_KEY` in your MCP env to use your own key |
+| `Payment required` on every call | Set `NOELCLAW_API_KEY` — wallet auth is automatic but an API key gives full access |
 | `Payment already used` error | Each `NOELCLAW_PAYMENT_HEADER` is single-use — clear it after a successful call |
-| `No matching USDC transfer found` | Make sure you sent to the exact address and amount shown in the 402 response |
-| `NOEL_WALLET_ADDRESS not configured` | Self-hosted only — set via `npx convex env set NOEL_WALLET_ADDRESS "0x..."` |
+| `No matching USDC transfer found` | Send to the exact address and amount shown in the 402 response |
 
 ---
 
